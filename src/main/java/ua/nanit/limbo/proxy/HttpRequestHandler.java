@@ -5,7 +5,6 @@ import io.netty.channel.*;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.websocketx.*;
 import io.netty.util.CharsetUtil;
-import ua.nanit.limbo.server.Log;
 
 import java.util.Base64;
 
@@ -18,29 +17,16 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<Object> {
     }
 
     @Override
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
-        Log.info("[WSProxy-HTTP] Handler active");
-        super.channelActive(ctx);
-    }
-
-    @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
-        Log.info("[WSProxy-HTTP] Received: %s", msg.getClass().getSimpleName());
-        
         if (msg instanceof FullHttpRequest) {
             handleHttpRequest(ctx, (FullHttpRequest) msg);
         } else if (msg instanceof WebSocketFrame) {
             handleWebSocketFrame(ctx, (WebSocketFrame) msg);
-        } else {
-            Log.info("[WSProxy-HTTP] Unknown message type: %s", msg.getClass().getName());
         }
     }
 
     private void handleHttpRequest(ChannelHandlerContext ctx, FullHttpRequest req) {
-        Log.info("[WSProxy-HTTP] HTTP Request: %s %s", req.method(), req.uri());
-        
         if (req.headers().contains(HttpHeaderNames.UPGRADE, HttpHeaderValues.WEBSOCKET, true)) {
-            Log.info("[WSProxy-HTTP] WebSocket upgrade request");
             WebSocketServerHandshakerFactory wsFactory = new WebSocketServerHandshakerFactory(
                 getWebSocketLocation(req), null, true, 65536);
             handshaker = wsFactory.newHandshaker(req);
@@ -60,13 +46,11 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<Object> {
         FullHttpResponse response;
 
         if ("/".equals(uri)) {
-            Log.info("[WSProxy-HTTP] Serving /");
             response = new DefaultFullHttpResponse(
                 HttpVersion.HTTP_1_1, HttpResponseStatus.FORBIDDEN,
                 Unpooled.copiedBuffer("This is a Discord bot endpoint. Access denied.", CharsetUtil.UTF_8));
             response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=utf-8");
         } else if (("/" + config.getSubPath()).equals(uri)) {
-            Log.info("[WSProxy-HTTP] Serving subscription");
             String subscription = buildSubscription();
             String base64Content = Base64.getEncoder().encodeToString(subscription.getBytes());
             response = new DefaultFullHttpResponse(
@@ -74,7 +58,6 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<Object> {
                 Unpooled.copiedBuffer(base64Content + "\n", CharsetUtil.UTF_8));
             response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain");
         } else {
-            Log.info("[WSProxy-HTTP] 404 for: %s", uri);
             response = new DefaultFullHttpResponse(
                 HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_FOUND,
                 Unpooled.copiedBuffer("Not Found\n", CharsetUtil.UTF_8));
@@ -82,7 +65,6 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<Object> {
         }
 
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, response.content().readableBytes());
-        Log.info("[WSProxy-HTTP] Sending response: %s", response.status());
         ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }
 
@@ -119,8 +101,6 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<Object> {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        Log.error("[WSProxy-HTTP] Exception: %s", cause.getMessage());
-        cause.printStackTrace();
         ctx.close();
     }
 }
