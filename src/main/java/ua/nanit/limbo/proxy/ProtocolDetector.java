@@ -26,7 +26,15 @@ public class ProtocolDetector extends ChannelInboundHandlerAdapter {
     }
 
     @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        Log.info("[WSProxy] New connection from: %s", ctx.channel().remoteAddress());
+        super.channelActive(ctx);
+    }
+
+    @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        Log.info("[WSProxy] channelRead called, msg type: %s", msg.getClass().getSimpleName());
+        
         if (!(msg instanceof ByteBuf)) {
             ctx.fireChannelRead(msg);
             return;
@@ -41,20 +49,20 @@ public class ProtocolDetector extends ChannelInboundHandlerAdapter {
         int firstByte = buf.getUnsignedByte(buf.readerIndex());
         ChannelPipeline pipeline = ctx.pipeline();
 
-        Log.debug("[WSProxy] First byte: %d ('%c')", firstByte, (char) firstByte);
+        Log.info("[WSProxy] First byte: %d ('%c'), readable: %d", firstByte, (char) firstByte, buf.readableBytes());
 
         // 先移除自己
         pipeline.remove(this);
 
         if (isHttp(firstByte)) {
-            Log.debug("[WSProxy] Detected HTTP protocol");
+            Log.info("[WSProxy] Switching to HTTP mode");
             // HTTP/WebSocket处理
             pipeline.addLast("http_codec", new HttpServerCodec());
             pipeline.addLast("http_aggregator", new HttpObjectAggregator(65536));
             pipeline.addLast("ws_compression", new WebSocketServerCompressionHandler());
             pipeline.addLast("http_handler", new HttpRequestHandler(proxyConfig));
         } else {
-            Log.debug("[WSProxy] Detected Minecraft protocol");
+            Log.info("[WSProxy] Switching to Minecraft mode");
             // Minecraft协议处理
             PacketDecoder decoder = new PacketDecoder();
             PacketEncoder encoder = new PacketEncoder();
@@ -79,6 +87,12 @@ public class ProtocolDetector extends ChannelInboundHandlerAdapter {
 
         // 把数据传递给新添加的handler
         ctx.fireChannelRead(msg);
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        Log.error("[WSProxy] Exception: %s", cause.getMessage());
+        ctx.close();
     }
 
     private boolean isHttp(int firstByte) {
