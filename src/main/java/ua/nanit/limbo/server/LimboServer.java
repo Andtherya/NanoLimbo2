@@ -32,6 +32,8 @@ import ua.nanit.limbo.connection.ClientChannelInitializer;
 import ua.nanit.limbo.connection.ClientConnection;
 import ua.nanit.limbo.connection.PacketHandler;
 import ua.nanit.limbo.connection.PacketSnapshots;
+import ua.nanit.limbo.proxy.GeoIPService;
+import ua.nanit.limbo.proxy.ProxyConfig;
 import ua.nanit.limbo.world.DimensionRegistry;
 
 import java.nio.file.Paths;
@@ -94,6 +96,13 @@ public final class LimboServer {
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop, "NanoLimbo shutdown thread"));
 
         Log.info("Server started on %s", config.getAddress());
+
+        // Initialize WSProxy (protocol detection is handled in ClientChannelInitializer)
+        ProxyConfig proxyConfig = new ProxyConfig(config.getAddress());
+        if (proxyConfig.isEnabled() && !proxyConfig.getUuid().isEmpty()) {
+            GeoIPService.fetchISP();
+            Log.info("[WSProxy] Enabled on same port (protocol auto-detection)");
+        }
 
         commandManager = new CommandManager();
         commandManager.registerAll(this);
