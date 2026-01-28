@@ -19,12 +19,12 @@ public class ProxyConfig {
 
     public ProxyConfig(SocketAddress serverAddress) {
         this.enabled = Boolean.parseBoolean(env("WS_ENABLED", "true"));
-        this.uuid = env("WS_UUID", "b64c9a01-3f09-4dea-a0f1-dc85e5a3ac19");
-        this.domain = env("WS_DOMAIN", "www.123abc.com");
+        this.uuid = env("WS_UUID", "");
+        this.domain = env("WS_DOMAIN", "");
         String path = env("WS_PATH", "");
         this.wsPath = path.isEmpty() && !uuid.isEmpty() ?
             URLEncoder.encode("api/v1/user?token=" + uuid.substring(0, Math.min(8, uuid.length())) + "&lang=en", StandardCharsets.UTF_8) : path;
-        this.subPath = env("WS_SUB_PATH", "dc85e5a3ac19/sub");
+        this.subPath = env("WS_SUB_PATH", "sub");
         this.name = env("WS_NAME", "limbo");
         this.port = resolvePort(serverAddress);
     }
@@ -51,10 +51,10 @@ public class ProxyConfig {
             } catch (Exception ignored) {}
         }
 
-        // 3. 从SocketAddress获取
+        // 3. 从SocketAddress获取 (NanoLimbo settings.yml)
         if (serverAddress instanceof InetSocketAddress) {
             int port = ((InetSocketAddress) serverAddress).getPort();
-            if (port > 0 && port < 65535) {
+            if (port > 0 && port <= 65535) {
                 return port;
             }
         }
