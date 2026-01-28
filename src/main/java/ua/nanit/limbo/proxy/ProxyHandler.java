@@ -5,6 +5,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollSocketChannel;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import ua.nanit.limbo.server.Log;
@@ -229,8 +232,9 @@ public class ProxyHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
         DnsResolver.resolve(host).thenAccept(resolvedHost -> {
             Log.info("[WSProxy-Proxy] Resolved to: %s", resolvedHost);
             Bootstrap b = new Bootstrap();
+            Class<? extends SocketChannel> channelClass = Epoll.isAvailable() ? EpollSocketChannel.class : NioSocketChannel.class;
             b.group(ctx.channel().eventLoop())
-                .channel(NioSocketChannel.class)
+                .channel(channelClass)
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                 .option(ChannelOption.SO_KEEPALIVE, true)
                 .handler(new ChannelInitializer<Channel>() {
@@ -248,7 +252,11 @@ public class ProxyHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
                         outboundChannel.writeAndFlush(Unpooled.wrappedBuffer(initialPayload));
                     }
                 } else {
-                    Log.error("[WSProxy-Proxy] Failed to connect: %s", future.cause().getMessage());
+                    String errorMsg = future.cause() != null ? future.cause().getMessage() : "unknown";
+                    Log.error("[WSProxy-Proxy] Failed to connect to " + resolvedHost + ":" + port + " - " + errorMsg);
+                    if (future.cause() != null) {
+                        future.cause().printStackTrace();
+                    }
                     ctx.close();
                 }
             });
