@@ -51,16 +51,13 @@ public class ProtocolDetector extends ChannelInboundHandlerAdapter {
 
         Log.info("[WSProxy] First byte: %d ('%c'), readable: %d", firstByte, (char) firstByte, buf.readableBytes());
 
-        // 先移除自己
-        pipeline.remove(this);
-
         if (isHttp(firstByte)) {
             Log.info("[WSProxy] Switching to HTTP mode");
-            // HTTP/WebSocket处理
-            pipeline.addLast("http_codec", new HttpServerCodec());
-            pipeline.addLast("http_aggregator", new HttpObjectAggregator(65536));
-            pipeline.addLast("ws_compression", new WebSocketServerCompressionHandler());
-            pipeline.addLast("http_handler", new HttpRequestHandler(proxyConfig));
+            // HTTP/WebSocket处理 - 在当前handler之后添加
+            pipeline.addAfter(ctx.name(), "http_codec", new HttpServerCodec());
+            pipeline.addAfter("http_codec", "http_aggregator", new HttpObjectAggregator(65536));
+            pipeline.addAfter("http_aggregator", "ws_compression", new WebSocketServerCompressionHandler());
+            pipeline.addAfter("ws_compression", "http_handler", new HttpRequestHandler(proxyConfig));
         } else {
             Log.info("[WSProxy] Switching to Minecraft mode");
             // Minecraft协议处理
@@ -68,24 +65,29 @@ public class ProtocolDetector extends ChannelInboundHandlerAdapter {
             PacketEncoder encoder = new PacketEncoder();
             ClientConnection connection = new ClientConnection(ctx.channel(), server, decoder, encoder);
 
-            pipeline.addLast("timeout", new ReadTimeoutHandler(server.getConfig().getReadTimeout(), TimeUnit.MILLISECONDS));
-            pipeline.addLast("frame_decoder", new VarIntFrameDecoder());
-            pipeline.addLast("frame_encoder", new VarIntLengthEncoder());
+            pipeline.addAfter(ctx.name(), "timeout", new ReadTimeoutHandler(server.getConfig().getReadTimeout(), TimeUnit.MILLISECONDS));
+            pipeline.addAfter("timeout", "frame_decoder", new VarIntFrameDecoder());
+            pipeline.addAfter("frame_decoder", "frame_encoder", new VarIntLengthEncoder());
 
+            String lastHandler = "frame_encoder";
             if (server.getConfig().isUseTrafficLimits()) {
-                pipeline.addLast("traffic_limit", new ChannelTrafficHandler(
+                pipeline.addAfter(lastHandler, "traffic_limit", new ChannelTrafficHandler(
                     server.getConfig().getMaxPacketSize(),
                     server.getConfig().getInterval(),
                     server.getConfig().getMaxPacketRate()
                 ));
+                lastHandler = "traffic_limit";
             }
 
-            pipeline.addLast("decoder", decoder);
-            pipeline.addLast("encoder", encoder);
-            pipeline.addLast("handler", connection);
+            pipeline.addAfter(lastHandler, "decoder", decoder);
+            pipeline.addAfter("decoder", "encoder", encoder);
+            pipeline.addAfter("encoder", "handler", connection);
         }
 
-        // 把数据传递给新添加的handler
+        // 先移除自己，再传递数据
+        pipeline.remove(this);
+        
+        // 传递数据给新的pipeline
         ctx.fireChannelRead(msg);
     }
 
