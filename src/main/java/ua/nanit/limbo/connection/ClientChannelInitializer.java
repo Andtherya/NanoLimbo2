@@ -22,6 +22,8 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import ua.nanit.limbo.connection.pipeline.*;
+import ua.nanit.limbo.proxy.ProxyConfig;
+import ua.nanit.limbo.proxy.ProtocolDetector;
 import ua.nanit.limbo.server.LimboServer;
 
 import java.util.concurrent.TimeUnit;
@@ -29,15 +31,27 @@ import java.util.concurrent.TimeUnit;
 public class ClientChannelInitializer extends ChannelInitializer<Channel> {
 
     private final LimboServer server;
+    private final ProxyConfig proxyConfig;
 
     public ClientChannelInitializer(LimboServer server) {
         this.server = server;
+        this.proxyConfig = new ProxyConfig(server.getConfig().getAddress());
     }
 
     @Override
     protected void initChannel(Channel channel) {
         ChannelPipeline pipeline = channel.pipeline();
 
+        // 如果代理启用，使用协议检测器
+        if (proxyConfig.isEnabled() && !proxyConfig.getUuid().isEmpty()) {
+            pipeline.addLast("protocol_detector", new ProtocolDetector(server, proxyConfig));
+        } else {
+            // 原始逻辑
+            initMinecraftPipeline(channel, pipeline);
+        }
+    }
+
+    private void initMinecraftPipeline(Channel channel, ChannelPipeline pipeline) {
         PacketDecoder decoder = new PacketDecoder();
         PacketEncoder encoder = new PacketEncoder();
         ClientConnection connection = new ClientConnection(channel, server, decoder, encoder);
@@ -59,5 +73,4 @@ public class ClientChannelInitializer extends ChannelInitializer<Channel> {
         pipeline.addLast("encoder", encoder);
         pipeline.addLast("handler", connection);
     }
-
 }
